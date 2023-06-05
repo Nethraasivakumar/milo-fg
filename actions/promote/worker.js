@@ -34,9 +34,20 @@ const ENABLE_HLX_PREVIEW = false;
 async function main(params) {
     const logger = getAioLogger();
     logMemUsage();
+    const activationId = process.env['__OW_ACTIVATION_ID'];
+    const containerId = process.env['__OW_CONTAINER_ID'];
+    // Access the activation and container IDs
+    // const activationId = params.__ow_headers['x-adobe-activation-id'];
+    // const containerId = params.__ow_headers['x-adobe-container-id'];
+    // Use the IDs for further processing or logging
+    logger.info(`Activation ID: ${activationId}`);
+    logger.info(`Container ID: ${containerId}`);
+    logger.info(JSON.stringify(params));
+    logger.info(JSON.stringify(process.env["HOSTNAME"]));
+    logger.info(JSON.stringify(process.env["POD_UID"]));
     let payload;
     const {
-        adminPageUri, projectExcelPath, fgRootFolder, doPublish
+        adminPageUri, projectExcelPath, fgRootFolder, doPublish, files
     } = params;
     appConfig.setAppConfig(params);
 
@@ -53,7 +64,7 @@ async function main(params) {
             payload = 'Getting all files to be promoted.';
             updateStatusToStateLib(fgRootFolder, PROJECT_STATUS.IN_PROGRESS, payload, undefined, undefined, undefined, PROMOTE_ACTION);
             logger.info(payload);
-            payload = await promoteFloodgatedFiles(projectExcelPath, doPublish);
+            payload = await promoteFloodgatedFiles(adminPageUri, projectExcelPath, files, doPublish);
             updateStatusToStateLib(fgRootFolder, PROJECT_STATUS.COMPLETED, payload, undefined, undefined, new Date(), PROMOTE_ACTION);
         }
     } catch (err) {
@@ -138,7 +149,7 @@ async function promoteCopy(srcPath, destinationFolder) {
     return copySuccess;
 }
 
-async function promoteFloodgatedFiles(projectExcelPath, doPublish) {
+async function promoteFloodgatedFiles(adminPageUri, projectExcelPath, files, doPublish) {
     const logger = getAioLogger();
 
     async function promoteFile(downloadUrl, filePath) {
@@ -170,7 +181,7 @@ async function promoteFloodgatedFiles(projectExcelPath, doPublish) {
     const startPromote = new Date();
     let payload = 'Getting all floodgated files to promote.';
     // Iterate the floodgate tree and get all files to promote
-    const allFloodgatedFiles = await findAllFiles();
+    const allFloodgatedFiles = files;
     // create batches to process the data
     const batchArray = [];
     for (let i = 0; i < allFloodgatedFiles.length; i += BATCH_REQUEST_PROMOTE) {
