@@ -50,9 +50,22 @@ application:
             limits:
               timeout: 3600000
               memorySize: 2048
+              concurrency: 5
           status:
             function: actions/status/status.js
             web: 'yes'
             runtime: nodejs:16
             inputs:
               LOG_LEVEL: debug
+          promote-batch:
+            function: actions/promote/promoteBatch.js
+            web: 'yes'
+            runtime: nodejs:16
+            inputs:
+              LOG_LEVEL: debug
+            annotations:
+              require-adobe-auth: false
+              final: true
+            limits:
+              timeout: 1800000
+
