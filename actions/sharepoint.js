@@ -252,7 +252,6 @@ async function createSessionAndUploadFile(sp, file, dest, filename, isFloodgate)
  * Folders to create would be [/a/b, /a/c/d]
  * This triggers async and waits for batch to complete. These are small batches so should be fast.
  * The $batch can be used in future to submit only one URL
- * @param {*} adminPageUri AdminPageURI for getting configs
  * @param {*} srcPathList Paths of files for which folder creating is needed
  * @param {*} isFloodgate Is floodgate flag
  * @returns Create folder status

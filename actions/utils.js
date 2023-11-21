@@ -30,16 +30,28 @@ function getAioLogger(loggerName = 'main', logLevel = 'info') {
 }
 
 function handleExtension(path) {
-    if (path.endsWith('.xlsx')) {
-        return path.replace('.xlsx', '.json');
+    const pidx = path.lastIndexOf('/');
+    const fld = path.substring(0, pidx + 1);
+    let fn = path.substring(pidx + 1);
+
+    if (fn.endsWith('.xlsx')) {
+        fn = fn.replace('.xlsx', '.json');
     }
-    if (path.endsWith('/index.docx')) {
-        return path.substring(0, path.lastIndexOf('/index.docx') + 1);
+    if (fn.toLowerCase() === 'index.docx') {
+        fn = '';
     }
-    if (path.endsWith('.docx')) {
-        return path.substring(0, path.lastIndexOf('.'));
+    if (fn.endsWith('.docx')) {
+        fn = fn.substring(0, fn.lastIndexOf('.'));
     }
-    return path;
+
+    fn = fn
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[^a-z0-9.]+/g, '-')
+        .replace(/^-|-$/g, '');
+
+    return `${fld}${fn}`;
 }
 
 function getPathFromUrl(url) {

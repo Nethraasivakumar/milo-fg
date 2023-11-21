@@ -40,6 +40,13 @@ class FgStatus {
     };
 
     /**
+     * Status constants
+     */
+    static PROJECT_STAGE = {
+        PROMOTE_COPY_STATUS: 'promoteCopyStatus',
+    };
+
+    /**
      * Template that will be populated and stored in state
      */
     storeStatusTmpl = {
@@ -51,7 +58,8 @@ class FgStatus {
             activationId: '',
             startTime: '',
             endTime: '',
-            batchesInfo: []
+            batchesInfo: [],
+            details: {}
         }
     };
 
@@ -124,7 +132,7 @@ class FgStatus {
      * @returns progress object which is stored in the store
      */
     async updateStatusToStateLib({
-        status, statusMessage, activationId, action, startTime, endTime, batches
+        status, statusMessage, activationId, action, startTime, endTime, batches, details
     }) {
         try {
             await this.getStatusFromStateLib().then(async (result) => {
@@ -151,6 +159,9 @@ class FgStatus {
                     this.storeStatus.action.activationId = activationId;
                     this.storeStatus.action.startTime = startTime || this.storeStatus.action.startTime;
                     this.storeStatus.action.endTime = endTime || this.storeStatus.action.endTime;
+                }
+                if (details) {
+                    this.storeStatus.action.details = { ...this.storeStatus.action.details, ...details };
                 }
                 this.storeStatus.action.batches = batches || this.storeStatus.action.batches;
                 this.storeStatus.action.type = action || this.action || this.storeStatus.action.type;

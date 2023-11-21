@@ -21,9 +21,8 @@ const {
     getAuthorizedRequestOption, saveFile, getFileUsingDownloadUrl, fetchWithRetry
 } = require('../sharepoint');
 const {
-    getAioLogger, handleExtension, delay, logMemUsage, getInstanceKey, PROMOTE_ACTION, PROMOTE_BATCH
+    getAioLogger, delay, logMemUsage, getInstanceKey, PROMOTE_ACTION, PROMOTE_BATCH
 } = require('../utils');
-const helixUtils = require('../helixUtils');
 const FgAction = require('../FgAction');
 const FgStatus = require('../fgStatus');
 const BatchManager = require('../batchManager');
@@ -44,7 +43,7 @@ async function main(params) {
     };
     const ow = openwhisk();
     // Initialize action
-    logger.info(`Worker for ${PROMOTE_BATCH}_${batchNumber} started`);
+    logger.info(`Promote started for ${batchNumber}`);
     const fgAction = new FgAction(`${PROMOTE_BATCH}_${batchNumber}`, params);
     fgAction.init({ ow, skipUserDetails: true, fgStatusParams: { keySuffix: `Batch_${batchNumber}` } });
     const { fgStatus } = fgAction.getActionParams();
@@ -63,16 +62,29 @@ async function main(params) {
         await fgStatus.clearState();
 
         respPayload = 'Getting all files to be promoted.';
+        logger.info(respPayload);
         await fgStatus.updateStatusToStateLib({
             status: FgStatus.PROJECT_STATUS.STARTED,
-            statusMessage: respPayload
+            statusMessage: respPayload,
+            details: {
+                [FgStatus.PROJECT_STAGE.PROMOTE_COPY_STATUS]: FgStatus.PROJECT_STATUS.IN_PROGRESS
+            }
+
         });
+        respPayload = 'Promote files';
         logger.info(respPayload);
         respPayload = await promoteFloodgatedFiles(payload.doPublish, batchManager);
+        respPayload = `Promoted files ${JSON.stringify(respPayload)}`;
         await fgStatus.updateStatusToStateLib({
-            status: FgStatus.PROJECT_STATUS.COMPLETED,
-            statusMessage: respPayload
+            status: FgStatus.PROJECT_STATUS.IN_PROGRESS,
+            statusMessage: respPayload,
+            details: {
+                [FgStatus.PROJECT_STAGE.PROMOTE_COPY_STATUS]: FgStatus.PROJECT_STATUS.COMPLETED
+            }
         });
+        // A small delay before trigger
+        await delay(DELAY_TIME_PROMOTE);
+        await triggerPostCopy(ow, { ...appConfig.getPassthruParams(), batchNumber }, fgStatus);
     } catch (err) {
         await fgStatus.updateStatusToStateLib({
             status: FgStatus.PROJECT_STATUS.COMPLETED_WITH_ERROR,
@@ -175,45 +187,47 @@ async function promoteFloodgatedFiles(doPublish, batchManager) {
     stepMsg = `Completed promoting all documents in the batch ${currBatchLbl}`;
     logger.info(stepMsg);
 
-    logger.info('Previewing promoted files.');
-    let previewStatuses = [];
-    let publishStatuses = [];
-    if (helixUtils.canBulkPreviewPublish()) {
-        const prevPaths = promoteStatuses.filter((ps) => ps.success).map((ps) => handleExtension(ps.srcPath));
-        previewStatuses = await helixUtils.bulkPreviewPublish(prevPaths, helixUtils.getOperations().PREVIEW);
-        stepMsg = 'Completed generating Preview for promoted files.';
-        logger.info(stepMsg);
-
-        if (doPublish) {
-            stepMsg = 'Publishing promoted files.';
-            logger.info(stepMsg);
-            publishStatuses = await helixUtils.bulkPreviewPublish(prevPaths, helixUtils.getOperations().LIVE);
-            stepMsg = 'Completed Publishing for promoted files';
-            logger.info(stepMsg);
-        }
-    }
-
     const failedPromotes = promoteStatuses.filter((status) => !status.success)
         .map((status) => status.srcPath || 'Path Info Not available');
-    const failedPreviews = previewStatuses.filter((status) => !status.success)
-        .map((status) => status.path);
-    const failedPublishes = publishStatuses.filter((status) => !status.success)
-        .map((status) => status.path);
-    logger.info(`${currBatchLbl}, Prm: ${failedPromotes?.length}, Prv: ${failedPreviews?.length}, Pub: ${failedPublishes?.length}`);
+    logger.info(`Promote ${currBatchLbl}, Prm: ${failedPromotes?.length}`);
 
-    if (failedPromotes.length > 0 || failedPreviews.length > 0 || failedPublishes.length > 0) {
+    if (failedPromotes.length > 0) {
         stepMsg = 'Error occurred when promoting floodgated content. Check project excel sheet for additional information.';
         logger.info(stepMsg);
         // Write the information to batch manifest
-        currentBatch.writeResults({ failedPromotes, failedPreviews, failedPublishes });
-        throw new Error(stepMsg);
+        await currentBatch.writeResults({ failedPromotes });
     } else {
         stepMsg = `Promoted floodgate for ${currBatchLbl} successfully`;
         logger.info(stepMsg);
     }
     logMemUsage();
-    stepMsg = `All tasks for floodgate promote of ${currBatchLbl} is completed`;
+    stepMsg = `Floodgate promote (copy) of ${currBatchLbl} is completed`;
     return stepMsg;
+}
+
+async function triggerPostCopy(ow, params, fgStatus) {
+    return ow.actions.invoke({
+        name: 'milo-fg/post-copy-worker',
+        blocking: false, // this is the flag that instructs to execute the worker asynchronous
+        result: false,
+        params
+    }).then(async (result) => {
+        // attaching activation id to the status
+        // Its possible status is updated in post copy action before this callback is called.
+        await fgStatus.updateStatusToStateLib({
+            postPromoteActivationId: result.activationId
+        });
+        return {
+            postPromoteActivationId: result.activationId
+        };
+    }).catch(async (err) => {
+        await fgStatus.updateStatusToStateLib({
+            status: FgStatus.PROJECT_STATUS.FAILED,
+            statusMessage: `Failed to invoke actions ${err.message}`
+        });
+        getAioLogger().error(`Failed to invoke actions for batch ${params.batchNumber}`, err);
+        return {};
+    });
 }
 
 function exitAction(resp) {

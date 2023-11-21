@@ -79,6 +79,14 @@ application:
               timeout: 3600000
               memorySize: 1024
               concurrency: 5
+          post-copy-worker:
+            function: actions/promote/postCopyWorker.js
+            web: 'no'
+            runtime: nodejs:16
+            inputs:
+              LOG_LEVEL: debug
+            limits:
+              timeout: 3600000
           promote-trigger-n-track:
             function: actions/promote/triggerNTrack.js
             web: 'no'

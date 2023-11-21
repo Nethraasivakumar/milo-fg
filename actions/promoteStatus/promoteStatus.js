@@ -83,7 +83,7 @@ async function main(args) {
         }
 
         // Starts
-        const { siteFgRootPath } = appConfig.getConfig();
+        const siteFgRootPath = appConfig.getSiteFgRootPath();
         const batchManager = new BatchManager({ key: PROMOTE_ACTION, instanceKey: getInstanceKey({ fgRootFolder: siteFgRootPath }) });
         await batchManager.init({ batchNumber });
         const currentBatch = batchNumber ? await batchManager.getCurrentBatch() : null;
@@ -117,7 +117,7 @@ async function main(args) {
     }
 
     return exitAction({
-        payload,
+        ...payload
     });
 }
 
